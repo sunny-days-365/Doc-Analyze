@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DocumentUploadProps {
   onDocumentUploaded: (document: any) => void;
@@ -16,8 +18,18 @@ const DocumentUpload = ({ onDocumentUploaded }: DocumentUploadProps) => {
   const [progress, setProgress] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to upload documents.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUploading(true);
     setProgress(0);
 
@@ -30,6 +42,7 @@ const DocumentUpload = ({ onDocumentUploaded }: DocumentUploadProps) => {
         { step: 'Extracting text...', progress: 40 },
         { step: 'AI analysis...', progress: 60 },
         { step: 'Generating summary...', progress: 80 },
+        { step: 'Saving to database...', progress: 90 },
         { step: 'Finalizing...', progress: 100 }
       ];
 
@@ -38,27 +51,54 @@ const DocumentUpload = ({ onDocumentUploaded }: DocumentUploadProps) => {
         await new Promise(resolve => setTimeout(resolve, 800));
       }
 
-      // Create mock processed document
-      const processedDoc = {
-        id: Date.now() + Math.random(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadedAt: new Date(),
-        status: 'processed',
-        summary: 'This document has been successfully processed by our AI engine. Key topics include business strategy, financial analysis, and operational improvements.',
-        extractedText: 'Sample extracted text from the document...',
-        confidence: 0.95,
-        tags: ['business', 'strategy', 'analysis'],
-        insights: [
-          'Document contains financial projections',
-          'Strategic recommendations identified',
-          'Key performance metrics mentioned'
-        ]
-      };
+      // Save document to Supabase
+      try {
+        const { data: documentData, error } = await supabase
+          .from('documents')
+          .insert({
+            user_id: user.id,
+            name: file.name,
+            file_size: file.size,
+            file_type: file.type,
+            summary: 'This document has been successfully processed by our AI engine. Key topics include business strategy, financial analysis, and operational improvements.',
+            extracted_text: 'Sample extracted text from the document...',
+            confidence: 0.95,
+            tags: ['business', 'strategy', 'analysis'],
+            insights: [
+              'Document contains financial projections',
+              'Strategic recommendations identified', 
+              'Key performance metrics mentioned'
+            ],
+            status: 'processed'
+          })
+          .select()
+          .single();
 
-      setUploadedFiles(prev => [...prev, processedDoc]);
-      onDocumentUploaded(processedDoc);
+        if (error) {
+          console.error('Error saving document:', error);
+          toast({
+            title: "Upload Error",
+            description: "Failed to save document. Please try again.",
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        const processedDoc = {
+          ...documentData,
+          uploadedAt: new Date(documentData.created_at),
+        };
+
+        setUploadedFiles(prev => [...prev, processedDoc]);
+        onDocumentUploaded(processedDoc);
+      } catch (error) {
+        console.error('Unexpected error:', error);
+        toast({
+          title: "Upload Error", 
+          description: "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      }
     }
 
     setUploading(false);
@@ -66,9 +106,9 @@ const DocumentUpload = ({ onDocumentUploaded }: DocumentUploadProps) => {
 
     toast({
       title: "Documents Processed Successfully",
-      description: `${acceptedFiles.length} document(s) have been analyzed and added to your library.`,
+      description: `${acceptedFiles.length} document(s) have been analyzed and saved to your library.`,
     });
-  }, [onDocumentUploaded, toast]);
+  }, [onDocumentUploaded, toast, user]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -143,7 +183,7 @@ const DocumentUpload = ({ onDocumentUploaded }: DocumentUploadProps) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-ai-success/20 rounded-lg flex items-center justify-center">
-                      {file.type.startsWith('image/') ? (
+                      {file.file_type.startsWith('image/') ? (
                         <Image className="w-5 h-5 text-ai-success" />
                       ) : (
                         <FileText className="w-5 h-5 text-ai-success" />
@@ -152,7 +192,7 @@ const DocumentUpload = ({ onDocumentUploaded }: DocumentUploadProps) => {
                     <div>
                       <p className="font-medium text-white">{file.name}</p>
                       <p className="text-sm text-slate-400">
-                        Processed • {Math.round(file.size / 1024)} KB
+                        Processed • {Math.round(file.file_size / 1024)} KB
                       </p>
                     </div>
                   </div>

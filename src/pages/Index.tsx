@@ -1,19 +1,32 @@
 
 import { useState } from "react";
-import { Upload, FileText, Brain, Search, Zap, BarChart3, Download, Eye } from "lucide-react";
+import { Upload, FileText, Brain, Search, Zap, BarChart3, Download, Eye, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import DocumentUpload from "@/components/DocumentUpload";
 import DocumentAnalysis from "@/components/DocumentAnalysis";
 import DocumentList from "@/components/DocumentList";
 import StatsOverview from "@/components/StatsOverview";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<'upload' | 'analyze' | 'documents'>('upload');
   const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([]);
+  
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
 
   const handleDocumentUploaded = (document: any) => {
     setUploadedDocuments(prev => [...prev, document]);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast({
+      title: "Signed Out",
+      description: "You have been successfully signed out.",
+    });
   };
 
   return (
@@ -32,6 +45,10 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-slate-300">
+                <User className="w-4 h-4" />
+                <span>{user?.email}</span>
+              </div>
               <Button variant="outline" size="sm" className="border-ai-primary/30 text-ai-primary hover:bg-ai-primary/10">
                 <Download className="w-4 h-4 mr-2" />
                 Export
@@ -39,6 +56,15 @@ const Index = () => {
               <Button size="sm" className="bg-gradient-ai hover:opacity-90">
                 <Zap className="w-4 h-4 mr-2" />
                 Upgrade
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSignOut}
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
               </Button>
             </div>
           </div>
